@@ -1,30 +1,18 @@
 <?php
 /**
- * Anchor is an *alpha* routing library for PHP 5
+ * Anchor is a routing library for PHP 5
  *
  * @copyright  Copyright (c) 2012 Jeff Turcotte, others
+ *
  * @author     Jeff Turcotte [jt] <jeff.turcotte@gmail.com>
  * @author     Will Bond [wb] <will@flourishlib.com>
- * @author     Will Bond [wb-imarc] <will@imarc.net>
  * @author     Bill Bushee [bb] <bill@imarc.net>
+ *
  * @license    MIT (see LICENSE or bottom of this file)
  * @package    Anchor
  * @link       http://github.com/jeffturcotte/anchor
  *
- * @version    1.0.0  Going 1.0 with many many fixes.
- * @changes    1.0.0a14 Fixed issue with class authorization [jt, 2012-10-24]
- * @changes    1.0.0a13 Fixed hook collection between __construct and init hooks, Adding hooks IN init hook no longer allowed [jt, 2012-10-24]
- * @changes    1.0.0a12 Added case sensitivity check to validateCallback() [bb, 2012-08-17]
- * @changes    1.0.0a11 Added setCanonicalRedirect option [jt, 2012-06-12]
- * @changes    1.0.0a10 Fixed bug with callHookCallbacks for catch hooks [jt, 2012-06-06]
- * @changes    1.0.0a9 Brought back * suffix route definition [jt, 2012-02-28]
- * @changes    1.0.0a8 Renamed enableStrictRouting to disableTrailingSlashRedirect [jt, 2012-01-30]
- * @changes    1.0.0a7 Added * param type to replace * prefix and suffix [jt, 2012-01-30]
- * @changes    1.0.0a6 Added support for different URL formatters for different params [wb, 2011-10-18]
- * @changes    1.0.0a5 Added check() [wb, 2011-09-22]
- * @changes    1.0.0a4 Added setCallbackParamName() [jt, 2011-09-08]
- * @changes    1.0.0a3 Added automatic redirection of URLs with trailing slashes, ::enableStrictRouting() [wb, 2011-08-26]
- *
+ * @version    2.0
  */
 final class Anchor {
 	/**
@@ -152,17 +140,6 @@ final class Anchor {
 	 * @var stdClass
 	 */
 	private static $persistent_data = NULL;
-
-	/**
-	 * An array of stdClass objects representing the callbacks to be executed
-	 * for each hook/URL combination
-	 *
-	 * @var array
-	 */
-	private static $hooks = array();
-
-	private static $global_hooks = array();
-	private static $active_hooks = array();
 
 	/**
 	 * Shortcut token for use when matching against HTTP headers in URLs
@@ -355,7 +332,7 @@ final class Anchor {
 	 * @param Closure $closure   The closure to execute for the route - if this is provided, $callback will be a name to reference the closure by
 	 * @return void
 	 */
-	public static function add($map, $callback='*_*::*', $closure=NULL)
+	public static function add($map, $callback, $closure=NULL)
 	{
 		$headers = array();
 		$url     = NULL;
@@ -465,14 +442,13 @@ final class Anchor {
 	}
 
 	/**
-	 * Destroys all hooks and routes. This is most useful for running tests
+	 * Destroys all routes. This is most useful for running tests
 	 *
 	 * @return void
 	 */
 	public static function clear()
 	{
 		self::$routes = array();
-		self::$hooks = array();
 	}
 
 	/**
@@ -551,61 +527,16 @@ final class Anchor {
 			}
 		}
 
-		$hooks = array();
-
 		self::pushActiveData($data);
 		self::pushActiveCallback($callable);
-		self::pushActiveHooks($hooks);
 
 		try {
 			$active_data = self::getActiveData();
+			$instance    = self::instantiateCallable($callable);
 
-			$hooks = self::collectHooks($callable, TRUE);
-
-			var_dump("number of hooks: ", count($hooks));
-
-			$instance = self::instantiateCallable($callable);
-
-			$hooks = array_merge($hooks, self::collectHooks($callable, TRUE));
-
-			self::callHookCallbacks($hooks, 'init', $active_data);
-
-			var_dump(__LINE__, $active_data);
-
-			try {
-				self::callHookCallbacks($hooks, 'before', $active_data);
-			} catch (Exception $e) {
-				self::catchExceptionFromCall($hooks, $e, $active_data);
-			}
-
-			var_dump(__LINE__, $active_data);
-
-			try {
-				self::dispatchCallable($callable, $instance, $active_data);
-			} catch (Exception $e) {
-				self::catchExceptionFromCall($hooks, $e, $active_data);
-			}
-
-			var_dump(__LINE__, $active_data);
-
-			try {
-				self::callHookCallbacks($hooks, 'after', $active_data);
-			} catch (Exception $e) {
-				self::catchExceptionFromCall($hooks, $e, $active_data);
-			}
-
-			var_dump(__LINE__, $active_data);
-
-			self::callHookCallbacks($hooks, 'finish', $active_data);
-
-			var_dump(__LINE__, $active_data);
+			self::dispatchCallable($callable, $instance, $active_data);
 
 			self::popActiveCallback();
-			self::popActiveHooks();
-
-			if (method_exists($instance, '__destruct')) {
-				$instance->__destruct();
-			}
 
 			if ($exit) {
 				exit();
@@ -616,40 +547,6 @@ final class Anchor {
 		} catch (Exception $e) {
 			self::popActiveCallback();
 			self::popActiveData();
-			self::popActiveHooks();
-			throw $e;
-		}
-	}
-
-	private static function catchExceptionFromCall($hooks, $e, &$active_data) {
-		$exception = new ReflectionClass($e);
-		$called = FALSE;
-
-		do {
-			$hook_name = "catch " . $exception->getName();
-
-			if (isset($hooks[$hook_name])) {
-				foreach($hooks[$hook_name] as $hook_obj) {
-					$callback = self::format($hook_obj->callback);
-
-					if (!is_callable($callback)) {
-						continue;
-					}
-
-					call_user_func_array($callback, array(&$active_data, $e));
-					$called = TRUE;
-				}
-
-				if ($called) {
-					break;
-				}
-			}
-		} while ($exception = $exception->getParentClass());
-
-		if (!$called) {
-			self::popActiveData();
-			self::popActiveCallback();
-			self::popActiveHooks();
 			throw $e;
 		}
 	}
@@ -864,55 +761,6 @@ final class Anchor {
 	}
 
 	/**
-	 * Adds a callback to be called at a pre-defined hook during the execution of a specific route callback
-	 *
-	 * @todo DOCUMENT HOOKS
-	 *
-	 * @param string $hook_name       The hook to attach the callback to
-	 * @param string $route_callback  The route callback to attach the callback to - if not qualified to a namespace and class, *-*:: will be prepended
-	 * @param string $hook_callback   The callback to attach
-	 * @param string ...
-	 * @return void
-	 */
-	public static function hook($hook_name, $route_callback, $hook_callback)
-	{
-		$args = func_get_args();
-		if (count($args) > 3) {
-			$hook_callbacks = array_slice($args, 2);
-		} else {
-			$hook_callbacks = array($hook_callback);
-		}
-
-		$hooks =& self::$global_hooks;
-
-		// push hooks to active hooks if running
-		if (self::$running) {
-			$hooks =& self::getActiveHooks();
-		}
-
-		if (strpos($route_callback, '::') === FALSE) {
-			$route_callback = '*::' . $route_callback;
-		}
-
-		$route_callbacks = preg_split('/\s*,\s*/', $route_callback);
-
-		foreach($route_callbacks as $route_callback) {
-			if (isset(self::$closure_aliases[$route_callback])) {
-				$route_callback = self::$closure_aliases[$route_callback];
-			}
-
-			foreach ($hook_callbacks as $hook_callback) {
-				$hook = (object) 'Hook';
-				$hook->hook = $hook_name;
-				$hook->route_callback = self::parseCallback($route_callback);
-				$hook->callback  = $hook_callback;
-				array_push($hooks, $hook);
-			}
-		}
-	}
-
-
-	/**
 	 * Returns a callback that matches the URL, headers and params passed
 	 *
 	 * @param string   $url      The URL to match against
@@ -1031,7 +879,6 @@ final class Anchor {
 						exit($url);
 					}
 				}
-
 
 				if (self::call($callable, $data)) {
 					break;
@@ -1185,31 +1032,6 @@ final class Anchor {
 	}
 
 	/**
-	 * undocumented function
-	 *
-	 * @param string $hooks
-	 * @param string $hook
-	 * @param stdClass  $data
-	 * @param Exception $exception
-	 * @return void
-	 */
-	private static function callHookCallbacks(&$hooks, $hook, &$data=NULL, $exception=NULL)
-	{
-		if (isset($hooks[$hook])) {
-			foreach($hooks[$hook] as $hook_obj) {
-				$callback = self::format($hook_obj->callback);
-
-				if (!is_callable($callback)) {
-					continue;
-				}
-
-				call_user_func_array($callback, array(&$data, $exception));
-			}
-		}
-
-	}
-
-	/**
 	 * Converts an `underscore_notation` or `camelCase` string to `camelCase`
 	 *
 	 * Derived from MIT fGrammer::camelize
@@ -1247,42 +1069,6 @@ final class Anchor {
 
 		self::$cache['camelize'][$key] =& $string;
 		return $string;
-	}
-
-	/**
-	 * undocumented function
-	 *
-	 * @param string $callback
-	 * @return void
-	 */
-	private static function collectHooks($callable, $active=FALSE)
-	{
-		$added_hooks =& self::$global_hooks;
-
-		if ($active) {
-			$added_hooks =& self::getActiveHooks();
-		}
-
-		if ($callable instanceof Closure) {
-			$callable = 'Anchor_' . spl_object_hash($callable);
-		}
-
-		if (isset(self::$closure_aliases_flipped[$callable])) {
-			$callable = self::$closure_aliases_flipped[$callable];
-		}
-
-		$hooks = array();
-
-		foreach($added_hooks as $hook) {
-			if (self::matchDerivativeCallback($hook->route_callback, $callable)) {
-				if (!isset($hooks[$hook->hook])) {
-					$hooks[$hook->hook] = array();
-				}
-				array_push($hooks[$hook->hook], $hook);
-			}
-		}
-
-		return $hooks;
 	}
 
 	/**
@@ -2041,21 +1827,6 @@ final class Anchor {
 		return array_pop(self::$active_callback);
 	}
 
-	private static function &getActiveHooks() {
-		$keys = array_keys(self::$active_hooks);
-		$key  = end($keys);
-		return self::$active_hooks[$key];
-	}
-
-	private static function &pushActiveHooks($hooks) {
-		array_push(self::$active_hooks, $hooks);
-		return $hooks;
-	}
-
-	private static function &popActiveHooks() {
-		$hooks = array_pop(self::$active_hooks);
-		return $hooks;
-	}
 
 	/**
 	 * undocumented function
