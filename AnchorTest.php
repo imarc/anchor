@@ -10,12 +10,6 @@ class AnchorTest extends PHPUnit_Framework_TestCase {
 		Anchor::authorize('AuthorizedController');
 		Anchor::authorize('Controller');
 
-		Anchor::hook('init',            '*', 'TestController::init');
-		Anchor::hook('before',          '*', 'TestController::before');
-		Anchor::hook('after',           '*', 'TestController::after');
-		Anchor::hook('catch Exception', '*', 'TestController::catchException');
-		Anchor::hook('finish',          '*', 'TestController::finish');
-
 		Anchor::add('/', 'TestController::home');
 		Anchor::add('/:class/^id/:method', '*::*');
 		Anchor::add('/:class/^id-:slug/:method', '*::*');
