@@ -3,64 +3,64 @@ class Anchor
 {
 
 
-	static private $routes = array();
+	static private $uri_map = array();
 
 	// TODO headers
 	// TODO $closure
 	// TODO 404
 	static public function add($url_pattern, $callback_pattern)
 	{
-		self::$routes[] = new Anchor\Route($url_pattern, $callback_pattern);
+		self::$uri_map[] = array(
+			new Anchor\URI($url_pattern),
+			new Anchor\URI($callback_pattern)
+		);
 	}
 
 	static public function check($url)
 	{
-		foreach (self::$routes as $route) {
-			if ($route->score($url)) {
+		foreach (self::$uri_map as $pair) {
+			list($in_uri, $out_uri) = $pair;
+			if ($in_uri->matches($url)) {
 				return TRUE;
 			}
 		}
+
 		return FALSE;
 	}
 
 	static public function resolve($url)
 	{
-		$best_score = 0;
-		$best_route = NULL;
-
-		foreach (self::$routes as $route) {
-			if ( ($score = $route->score($url)) > $best_score) {
-				$best_score = $score;
-				$best_route = $route;
+		foreach (self::$uri_map as $pair) {
+			list($in_uri, $out_uri) = $pair;
+			if ($in_uri->matches($url)) {
+				return $out_uri->toString($url);
 			}
 		}
 
-		return $best_route->toCallback($url);
+		return FALSE;
 	}
 
+	static public function linkable($callback)
+	{
+		foreach (self::$uri_map as $pair) {
+			list($in_uri, $out_uri) = $pair;
+			if ($out_uri->matches($callback)) {
+				return TRUE;
+			}
+		}
 
+		return FALSE;
+	}
 
+	static public function link($callback)
+	{
+		foreach (self::$uri_map as $pair) {
+			list($in_uri, $out_uri) = $pair;
+			if ($out_uri->matches($callback)) {
+				return $in_uri->toString($callback);
+			}
+		}
 
-	//public static function add($map, $callback, $closure=NULL) {}
-	public static function alias($alias, $render_map) {}
-	public static function authorize($controller) {}
-	//public static function check($url) {}
-	public static function clear() {}
-	public static function disableTrailingSlashRedirect() {}
-	public static function &call($callable, $data=NULL, $exit=FALSE) {}
-	public static function format($format, $underscorize=FALSE, $default=NULL) {}
-	public static function link($callback_key) {}
-	//public static function resolve($url, $headers=array(), &$params=array(), &$data=NULL, &$offset=0, &$linkable=TRUE) {}
-	public static function run($exit=TRUE) {}
-	public static function setRequestPath($request_path) {}
-	public static function setFragmentRouting() {}
-	public static function setLegacyNamespacing() {}
-	public static function addToken($token, $conditions) {}
-	public static function triggerNotFound() {}
-	public static function triggerContinue() {}
-	public static function setCallbackParamName($type, $name) {}
-	public static function setControllerPath($path) {}
-	public static function setGlobalFunctions() {}
-	public static function setCanonicalRedirect() {}
-	public static function setURLParamFormatter($callback, $class='*', $param='*') {}
+		return FALSE;
+	}
 }
