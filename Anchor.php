@@ -219,6 +219,13 @@ class Anchor {
 	protected static $redirect_trailing_slashes = TRUE;
 
 	/**
+	 * If urls should be redirected to the lower case version
+	 *
+	 * @var boolean
+	 */
+	protected static $redirect_to_lower_case = FALSE;
+
+	/**
 	 * A stack containing all of the data objects
 	 *
 	 * @var array
@@ -654,6 +661,16 @@ class Anchor {
 	{
 		static::$redirect_trailing_slashes = FALSE;
 	}
+
+	/**
+	 * Enable redirecting urls to the lower case version
+	 *
+	 * @return void
+	 */
+    public static function enableLowerCaseRedirect()
+    {
+        static::$redirect_to_lower_case = TRUE;
+    }
 
 	/**
 	 * dispatch a callable (closure or method string)
@@ -1256,11 +1273,13 @@ class Anchor {
         }
 
         // $request_path should always be lower case.
-        $lower_case_path = strtolower($request_path);
+        if (static::$redirect_to_lower_case) {
+            $lower_case_path = strtolower($request_path);
 
-        if ($request_path != $lower_case_path) {
-            $request_path = $lower_case_path;
-            $redirect = true;
+            if ($request_path != $lower_case_path) {
+                $request_path = $lower_case_path;
+                $redirect = true;
+            }
         }
 
         if ($redirect) {
